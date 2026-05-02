@@ -1,0 +1,57 @@
+[project]
+name = "payments-agent"
+version = "0.1.0"
+description = "Solo Founder OS agent #11 — overdue invoice reminders with HITL gating. Stripe-shaped types; works with or without a Stripe key (mock provider for dev/dry-run)."
+authors = [{ name = "Alex Ji", email = "alex@vibexforge.com" }]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "anthropic>=0.40",
+    "solo-founder-os>=0.20",
+]
+
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial",
+]
+keywords = ["agent", "stripe", "billing", "indie", "solo-founder"]
+
+[project.optional-dependencies]
+stripe = ["stripe>=10.0"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+payments-agent = "payments_agent.__main__:main"
+
+[project.urls]
+Repository = "https://github.com/alex-jb/payments-agent"
+Issues = "https://github.com/alex-jb/payments-agent/issues"
+Homepage = "https://github.com/alex-jb/payments-agent"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["payments_agent"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = ["E501", "E731", "E402", "E702", "E741"]
