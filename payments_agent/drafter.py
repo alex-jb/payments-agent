@@ -184,38 +184,46 @@ def draft_reminder(
         return d
 
     # 2026-06-08: Andrew Ng's Reflection pattern — self-critique against the
-    # 4 hard money-safety rules already in SYSTEM_PROMPT, then revise if
-    # any rule is violated. Money is the highest-stake side effect in the
-    # whole stack; runtime self-check + Alex HITL review = double layer.
-    # Cost: ~$0.001 extra per draft (1 Haiku call). Reflection-pattern
-    # source: Andrew Ng "Agentic AI" course (2025-10).
-    reflection_prompt = (
-        f"Critique this payment-reminder draft against these 4 hard rules:\n"
-        f"  R1. NEVER thank for the unpaid invoice\n"
-        f"  R2. Quote EXACT amount ${invoice.amount_due_dollars:.2f} {invoice.currency}\n"
-        f"  R3. Quote EXACT days overdue ({invoice.days_overdue})\n"
-        f"  R4. NEVER invent a payment link or URL\n\n"
-        f"Subject: {subject}\nBody: {body}\n\n"
-        f"Reply with exactly: 'PASS' if all 4 rules satisfied, "
-        f"or 'FAIL: <one-line reason>' if any violated."
-    )
-    critique_resp, _ = client.messages_create(
-        model=DEFAULT_HAIKU_MODEL,
-        max_tokens=100,
-        system="You are a money-safety auditor. Be terse, strict.",
-        messages=[{"role": "user", "content": reflection_prompt}],
-    )
-    critique_text = (critique_resp or "").strip() if isinstance(critique_resp, str) else ""
-    if critique_text.startswith("FAIL"):
-        # Reflection caught a violation — log + fall back to template
-        _log_reflection("REFLECTION_BLOCKED", critique_text[:200])
-        d = _template_fallback(invoice, severity, founder_name)
-        d.raw_response = f"(Reflection FAIL: {critique_text})"
-        return d
-    elif critique_text.startswith("PASS"):
-        _log_reflection("REFLECTION_OK", "all 4 money-safety rules satisfied")
-    # If reflection itself failed (network err / empty), don't block —
-    # SYSTEM_PROMPT + HITL still apply.
+    # 4 hard money-safety rules already in SYSTEM_PROMPT. Wrapped in
+    # try/except so test mocks + production network failures both don't
+    # block the primary draft (SYSTEM_PROMPT + HITL still apply).
+    # Cost: ~$0.001 extra per draft. Source: Andrew Ng "Agentic AI" 2025-10.
+    try:
+        reflection_prompt = (
+            f"Critique this payment-reminder draft against these 4 hard rules:\n"
+            f"  R1. NEVER thank for the unpaid invoice\n"
+            f"  R2. Quote EXACT amount ${invoice.amount_due_dollars:.2f} {invoice.currency}\n"
+            f"  R3. Quote EXACT days overdue ({invoice.days_overdue})\n"
+            f"  R4. NEVER invent a payment link or URL\n\n"
+            f"Subject: {subject}\nBody: {body}\n\n"
+            f"Reply with exactly: 'PASS' if all 4 rules satisfied, "
+            f"or 'FAIL: <one-line reason>' if any violated."
+        )
+        result = client.messages_create(
+            model=DEFAULT_HAIKU_MODEL,
+            max_tokens=100,
+            system="You are a money-safety auditor. Be terse, strict.",
+            messages=[{"role": "user", "content": reflection_prompt}],
+        )
+        # Tolerant unpacking — real (resp, err); mocked may be any shape.
+        critique_resp = result[0] if isinstance(result, tuple) and len(result) >= 1 else None
+        if critique_resp is not None and hasattr(critique_resp, "content"):
+            try:
+                critique_text = critique_resp.content[0].text.strip() if critique_resp.content else ""
+            except Exception:
+                critique_text = ""
+        else:
+            critique_text = ""
+        if critique_text.startswith("FAIL"):
+            _log_reflection("REFLECTION_BLOCKED", critique_text[:200])
+            d = _template_fallback(invoice, severity, founder_name)
+            d.raw_response = f"(Reflection FAIL: {critique_text})"
+            return d
+        elif critique_text.startswith("PASS"):
+            _log_reflection("REFLECTION_OK", "all 4 money-safety rules satisfied")
+    except Exception as _refl_exc:
+        # Reflection layer is opportunistic; never block primary draft.
+        _log_reflection("REFLECTION_SKIPPED", f"reflection error: {str(_refl_exc)[:100]}")
 
     # L3 record_example for ICPL / skill distillation later.
     try:
